@@ -55,7 +55,7 @@ class HouseDBMS(DBMS):
         super().__init__()
         self.houses = houses
     
-    async def insert(self, connection: 'SAConnection', **kwargs) -> 'RowProxy':
+    async def insert(self, connection: 'SAConnection', **kwargs) -> int:
         result: 'ResultProxy' = await connection.execute(self.houses.insert().values(**kwargs))
         return (await result.first())[0]
 
