@@ -9,6 +9,8 @@ verify_ssl = true
 tornado = "*"
 aiopg = "*"
 sqlalchemy = "*"
+pytest = "*"
+pytest-asyncio = "*"
 
 [requires]
 python_version = "3.7"
