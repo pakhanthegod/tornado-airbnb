@@ -59,8 +59,8 @@ class HouseDBMS(DBMS):
         result: 'ResultProxy' = await connection.execute(self.houses.insert().values(**kwargs))
         return (await result.first())[0]
 
-    async def delete(self, connection: 'SAConnection', id: int, **kwargs) -> 'RowProxy':
-        result: 'ResultProxy' = await connection.execute(self.houses.delete().where(houses.c.id==id))
+    async def delete(self, connection: 'SAConnection', id: int, **kwargs) -> None:
+        await connection.execute(self.houses.delete().where(houses.c.id==id))
 
     async def update(self, connection: 'SAConnection', id: int, **kwargs) -> None:
         await connection.execute(self.houses.update().where(self.houses.c.id==id).values(**kwargs))
