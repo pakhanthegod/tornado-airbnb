@@ -2,12 +2,36 @@ version: '3'
 services:
   db:
     image: postgres:12
-    container_name: 'postgres'
+    container_name: 'airbnb_postgres'
+    env_file:
+      - .env
     environment:
-      - POSTGRES_USER=pakhan
-      - POSTGRES_PASSWORD=pakhan
-      - POSTGRES_DB=airbnb
+      - POSTGRES_USER=${PSQL_USER}
+      - POSTGRES_PASSWORD=${PSQL_PASSWORD}
+      - POSTGRES_DB=${PSQL_DB}
     ports:
       - '54320:5432'
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
+  app:
+    container_name: 'airbnb_app'
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '8888:8888'
+    volumes:
+      - ./airbnb:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+  migrate:
+    container_name: 'airbnb_migrate'
+    build:
+      context: .
+      dockerfile: ./migrate/Dockerfile
+    volumes:
+      - ./migrate:/migrate
+    env_file:
+      - .env
