@@ -1,42 +1,55 @@
 --liquibase formatted sql
 
 --changeset nvoxland:1
-CREATE TYPE user_role AS ENUM ('user', 'staff');
+CREATE TYPE user_role AS ENUM('customer', 'staff');
 
-CREATE TABLE users (
-        id SERIAL NOT NULL, 
-        first_name VARCHAR NOT NULL, 
-        last_name VARCHAR NOT NULL, 
-        email VARCHAR NOT NULL, 
-        password VARCHAR NOT NULL, 
-        avatar VARCHAR, 
-        date DATE, 
-        role user_role NOT NULL, 
-        PRIMARY KEY (id)
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  first_name varchar(128) NOT NULL,
+  last_name varchar(128) NOT NULL,
+  email varchar(255) NOT NULL,
+  password bytea NOT NULL,
+  avatar varchar(255) NULL,
+  birthdate date NOT NULL,
+  role user_role DEFAULT 'customer' NOT NULL
 );
 
-CREATE TABLE houses (
-        id SERIAL NOT NULL, 
-        user_id INTEGER, 
-        description TEXT, 
-        address TEXT, 
-        max_person_number INTEGER, 
-        price NUMERIC(10, 2), 
-        is_reviewed BOOLEAN, 
-        latitude FLOAT, 
-        longitude FLOAT, 
-        PRIMARY KEY (id), 
-        FOREIGN KEY(user_id) REFERENCES users (id)
+CREATE TABLE IF NOT EXISTS houses (
+  id SERIAL PRIMARY KEY,
+  description text NOT NULL,
+  address text NOT NULL,
+  max_person_number integer NOT NULL,
+  price numeric(10,2) NOT NULL,
+  is_reviewed boolean DEFAULT FALSE NOT NULL,
+  reviewed timestamptz NULL,
+  latitude float,
+  longitude float,
+  rating integer DEFAULT 0 NOT NULL,
+
+  user_id integer REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE orders (
-        id SERIAL NOT NULL, 
-        house_id INTEGER NOT NULL, 
-        user_id INTEGER NOT NULL, 
-        date_from TIMESTAMP WITH TIME ZONE NOT NULL, 
-        date_to TIMESTAMP WITH TIME ZONE NOT NULL, 
-        rating INTEGER, 
-        PRIMARY KEY (id), 
-        FOREIGN KEY(house_id) REFERENCES houses (id), 
-        FOREIGN KEY(user_id) REFERENCES users (id)
+CREATE TABLE IF NOT EXISTS orders (
+  id SERIAL PRIMARY KEY,
+  book_from timestamptz NOT NULL,
+  book_to timestamptz NOT NULL,
+  rating integer,
+
+  house_id integer REFERENCES houses(id) ON DELETE CASCADE,
+  user_id integer REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE FUNCTION reviewed_update() RETURNS trigger AS $body$
+  BEGIN
+    IF NEW.is_reviewed = TRUE THEN
+      INSERT INTO houses (reviewed) VALUES (CURRENT_TIMESTAMP);
+    END IF;
+
+    RETURN NEW;
+  END;
+$body$ LANGUAGE plpgsql;
+
+CREATE TRIGGER reviewed_time_update
+  AFTER UPDATE ON houses
+  FOR EACH ROW
+  EXECUTE PROCEDURE reviewed_update();

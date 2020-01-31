@@ -8,10 +8,18 @@
         http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
     <changeSet id="1" author="pakhan">
         <sqlFile
-          path="sql_migrations/0001_initial.sql"
-          relativeToChangelogFile="true"
-          splitStatements="false"
-          encoding="UTF-8"
-          />
+            path="sql_migrations/0001_initial.sql"
+            relativeToChangelogFile="true"
+            splitStatements="false"
+            encoding="UTF-8"
+        />
     </changeSet>
+    <!-- <changeSet id="2" author="pakhan">
+        <sqlFile
+            path="sql_migrations/0002_insert_defaults.sql"
+            relativeToChangelogFile="true"
+            splitStatements="false"
+            encoding="UTF-8"
+        />
+    </changeSet> -->
 </databaseChangeLog>
