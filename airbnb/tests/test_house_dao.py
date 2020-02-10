@@ -6,7 +6,7 @@ from daos import HouseDAO
 
 
 @pytest.mark.asyncio
-async def test_insert(connection, user_object):
+async def test_insert(house_dao, user_object):
     data = {
         'description': 'test_insertttt',
         'address': 'test_insert',
@@ -16,51 +16,42 @@ async def test_insert(connection, user_object):
         'longitude': 3.65243634634,
         'user_id': user_object.id,
     }
-    house = HouseDAO()
 
-    house_id = await house.insert(connection, **data)
-    select = await house.selectById(connection, house_id)
+    house_id = await house_dao.insert(**data)
+    select = await house_dao.selectById(house_id)
 
-    assert data['description'] == select[house.table.c.description]
+    assert data['description'] == select[house_dao.table.c.description]
 
 
 @pytest.mark.asyncio
-async def test_delete(connection, house_object):
-    house = HouseDAO()
-
-    await house.delete(connection, house_object[house.table.c.id])
-    select = await house.selectById(connection, house_object[house.table.c.id])
+async def test_delete(house_dao, house_object):
+    await house_dao.delete(house_object[house_dao.table.c.id])
+    select = await house_dao.selectById(house_object[house_dao.table.c.id])
 
     assert select is None
 
 
 @pytest.mark.asyncio
-async def test_selectById(connection, house_object):
-    house = HouseDAO()
+async def test_selectById(house_dao, house_object):
+    result = await house_dao.selectById(house_object[house_dao.table.c.id])
 
-    result = await house.selectById(connection, house_object[house.table.c.id])
-
-    assert house_object[house.table.c.id] == result[0]
+    assert house_object[house_dao.table.c.id] == result[0]
 
 
 @pytest.mark.asyncio
-async def test_update(connection, house_object):
-    house = HouseDAO()
+async def test_update(house_dao, house_object):
     new_data = {
-        '_id': house_object[house.table.c.id],
+        '_id': house_object[house_dao.table.c.id],
         'description': 'new description for update',
     }
 
-    await house.update(connection, **new_data)
-    select = await house.selectById(connection, house_object[house.table.c.id])
+    await house_dao.update(**new_data)
+    select = await house_dao.selectById(house_object[house_dao.table.c.id])
 
-    assert house_object[house.table.c.description] != select[house.table.c.description]
+    assert house_object[house_dao.table.c.description] != select[house_dao.table.c.description]
 
 
 @pytest.mark.asyncio
-async def test_selectAll(connection, house_object):
-    house = HouseDAO()
-
-    result = await house.selectAll(connection)
-
+async def test_selectAll(house_dao, house_object):
+    result = await house_dao.selectAll()
     assert len(result) > 0

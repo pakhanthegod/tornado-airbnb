@@ -1,11 +1,14 @@
 import os
 import datetime
 import decimal
+import asyncio
+import unittest
 
 import pytest
 from aiopg.sa import create_engine
 
-from daos import HouseDAO, UserDAO, OrderDAO
+from app import make_app
+from daos import HouseDAO, UserDAO, OrderDAO, AiopgService, DatabaseService
 
 
 USER = os.environ.get('DB_USER')
@@ -15,7 +18,15 @@ HOST = os.environ.get('DB_HOST')
 PORT = os.environ.get('DB_PORT')
 
 
-@pytest.fixture(scope='function')
+@pytest.yield_fixture(scope='session')
+def event_loop(request):
+    """Create an instance of the default event loop for each test case."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(autouse=True)
 async def connection():
     async with create_engine(
         user=USER, password=PASSWORD,
@@ -28,8 +39,33 @@ async def connection():
             await transaction.rollback()
 
 
+class AiopgTestService(DatabaseService):
+    async def get_connection(self):
+        return connection
+
+
+@pytest.fixture
+def app():
+    return make_app()
+
+
+@pytest.fixture()
+async def user_dao():
+    return UserDAO(AiopgTestService)
+
+
+@pytest.fixture()
+async def order_dao():
+    return OrderDAO(AiopgTestService)
+
+
+@pytest.fixture()
+async def house_dao():
+    return HouseDAO(AiopgTestService)
+
+
 @pytest.fixture(scope='function')
-async def user_object(connection):
+async def user_object(user_dao):
     test_user_data = {
         'first_name': 'John',
         'last_name': 'Doe',
@@ -37,13 +73,12 @@ async def user_object(connection):
         'password': 'qwe',
         'birthdate': '01/01/1990',
     }
-    user_dao = UserDAO()
-    test_user_id = await user_dao.insert(connection, **test_user_data)
-    return await user_dao.selectById(connection, test_user_id)
+    test_user_id = await user_dao.insert(**test_user_data)
+    return await user_dao.selectById(test_user_id)
 
 
 @pytest.fixture(scope='function')
-async def house_object(connection, user_object):
+async def house_object(house_dao, user_object):
     test_house_data = {
         'description': 'A cool house',
         'address': 'USA, some st.',
@@ -53,19 +88,17 @@ async def house_object(connection, user_object):
         'longitude': 37.579362,
         'user_id': user_object.id,
     }
-    house_dao = HouseDAO()
-    test_house_id = await house_dao.insert(connection, **test_house_data)
-    return await house_dao.selectById(connection, test_house_id)
+    test_house_id = await house_dao.insert(**test_house_data)
+    return await house_dao.selectById(test_house_id)
 
 
 @pytest.fixture(scope='function')
-async def order_object(connection, user_object, house_object):
+async def order_object(order_dao, user_object, house_object):
     test_order_data = {
         'book_from': datetime.datetime.utcnow() - datetime.timedelta(days=5),
         'book_to': datetime.datetime.utcnow() + datetime.timedelta(days=10),
         'house_id': house_object.id,
         'user_id': user_object.id,
     }
-    order_dao = OrderDAO()
-    test_order_id = await order_dao.insert(connection, **test_order_data)
-    return await order_dao.selectById(connection, test_order_id)
+    test_order_id = await order_dao.insert(**test_order_data)
+    return await order_dao.selectById(test_order_id)

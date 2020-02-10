@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import atexit
 import decimal
 import asyncio
 import os
 import datetime
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+import asyncpgsa
 from aiopg.sa import create_engine
 from sqlalchemy import Table
 from sqlalchemy.sql.ddl import CreateTable, _CreateDropBase
@@ -19,9 +21,42 @@ from models.users import user, user_role
 
 
 if TYPE_CHECKING:
+    from annotations import List
     from aiopg.sa.connection import SAConnection
     from aiopg.sa.result import ResultProxy, RowProxy
-    from aiopg.utils import _PoolContextManager
+    from aiopg.sa.engine import Engine
+
+    from asyncpg.connection import Connection
+    from asyncpg.pool import Pool
+    create_pool()
+
+
+class DatabaseService(ABC):
+    @abstractmethod
+    def get_connection(self):
+        pass
+
+
+class AiopgService(DatabaseService):
+    user = os.environ.get('DB_USER')
+    password = os.environ.get('DB_PASSWORD')
+    database = os.environ.get('DB_NAME')
+    host = os.environ.get('DB_HOST')
+    port = os.environ.get('DB_PORT')
+    _engine = None
+
+    async def get_engine(self) -> Engine:
+        if not self._engine:
+            self._engine = await create_engine(
+                user=self.user, database=self.database, host=self.host,
+                port=self.port, password=self.password,
+            )
+        return self._engine
+
+    async def get_connection(self) -> SAConnection:
+        engine = await self.get_engine()
+        connection = await engine.acquire()
+        return connection
 
 
 class DAO(ABC):
@@ -29,65 +64,64 @@ class DAO(ABC):
     Data access object allows access to data of database
     """
     table: Table
-    user = os.environ.get('DB_USER')
-    password = os.environ.get('DB_PASSWORD')
-    database = os.environ.get('DB_NAME')
-    host = os.environ.get('DB_HOST')
-    port = os.environ.get('DB_PORT')
 
-    async def get_engine(self) -> _PoolContextManager:
-        engine: _PoolContextManager = await create_engine(
-            user=self.user, database=self.database, host=self.host,
-            port=self.port, password=self.password,
-        )
-        return engine
+    def __init__(self, database: DatabaseService) -> None:
+        self.db = database()
 
-    async def create_table(self, connection: SAConnection):
-        try:
-            CreateTable(self.table).compile(dialect=dialect())
-            await connection.execute(CreateTable(self.table))
-        except DuplicateTable:
-            print('>>> Diplicate table')  # TODO: logging
-
-    async def insert(self, connection: SAConnection, **kwargs) -> int:
-        result: ResultProxy = await connection.execute(
+    async def insert(self, **kwargs) -> int:
+        connection = await self.db.get_connection()
+        result = await connection.execute(
             self.table
             .insert()
-            .values(**kwargs),
+            .values(**kwargs)  # noqa
         )
-        return (await result.first())[0]
+        row = await result.first()
+        await connection.close()
+        return row['id']
 
-    async def delete(self, connection: SAConnection, _id: int) -> None:
-        await connection.execute(
+    async def delete(self, _id: int) -> int:
+        connection = await self.db.get_connection()
+        result = await connection.execute(
             self.table
             .delete()
-            .where(self.table.c.id == _id),
+            .where(self.table.c.id == _id)  # noqa
         )
+        row = await result.first()
+        await connection.close()
+        return row['id']
 
-    async def update(
-        self, connection: SAConnection, _id: int, **kwargs,
-    ) -> None:
-        await connection.execute(
+    async def update(self, _id: int, **kwargs) -> RowProxy:
+        connection = await self.db.get_connection()
+        result = await connection.execute(
             self.table
             .update()
             .where(self.table.c.id == _id)
-            .values(**kwargs),
+            .values(**kwargs)  # noqa
         )
+        row = await result.first()
+        await connection.close()
+        return row
 
-    async def selectById(self, connection: SAConnection, _id: int) -> RowProxy:
-        result: ResultProxy = await connection.execute(
+    async def selectById(self, _id: int) -> RowProxy:
+        connection = await self.db.get_connection()
+        result = await connection.execute(
             self.table
             .select()
             .where(self.table.c.id == _id),
         )
-        return await result.first()
+        row = await result.first()
+        await connection.close()
+        return row
 
-    async def selectAll(self, connection: SAConnection) -> RowProxy:
-        result: ResultProxy = await connection.execute(
+    async def selectAll(self) -> List[RowProxy]:
+        connection = await self.db.get_connection()
+        result = await connection.execute(
             self.table
             .select(),
         )
-        return await result.fetchall()
+        rows = await result.fetchall()
+        await connection.close()
+        return rows
 
 
 class HouseDAO(DAO):
@@ -95,7 +129,6 @@ class HouseDAO(DAO):
 
     async def insert(
         self,
-        connection: SAConnection,
         user_id: int,
         description: str,
         address: str,
@@ -103,7 +136,7 @@ class HouseDAO(DAO):
         price: decimal.Decimal,
         latitude: float = None,
         longitude: float = None,
-    ):
+    ) -> int:
         kwargs = {
             'user_id': user_id,
             'description': description,
@@ -113,11 +146,10 @@ class HouseDAO(DAO):
             'latitude': latitude,
             'longitude': longitude,
         }
-        return await super().insert(connection, **kwargs)
+        return await super().insert(**kwargs)
 
     async def update(
         self,
-        connection: SAConnection,
         _id: int,
         user_id: int = None,
         description: str = None,
@@ -125,7 +157,7 @@ class HouseDAO(DAO):
         price: decimal.Decimal = None,
         latitude: float = None,
         longitude: float = None,
-    ):
+    ) -> RowProxy:
         kwargs = {
             'user_id': user_id,
             'description': description,
@@ -135,8 +167,8 @@ class HouseDAO(DAO):
             'longitude': longitude,
         }
         kwargs = {key: value for key, value in kwargs.items() if value}
-        if any(kwargs.values()):
-            await super().update(connection, _id, **kwargs)
+        if kwargs:
+            return await super().update(_id, **kwargs)
 
 
 class OrderDAO(DAO):
@@ -144,13 +176,12 @@ class OrderDAO(DAO):
 
     async def insert(
         self,
-        connection: SAConnection,
         book_from: datetime.datetime,
         book_to: datetime.datetime,
         house_id: int,
         user_id: int,
         rating: int = None,
-    ):
+    ) -> int:
         kwargs = {
             'book_from': book_from,
             'book_to': book_to,
@@ -158,18 +189,17 @@ class OrderDAO(DAO):
             'rating': rating,
             'user_id': user_id,
         }
-        return await super().insert(connection, **kwargs)
+        return await super().insert(**kwargs)
 
     async def update(
         self,
-        connection: SAConnection,
         _id: int,
         book_from: datetime.datetime = None,
         book_to: datetime.datetime = None,
         rating: int = None,
         house_id: int = None,
         user_id: int = None,
-    ):
+    ) -> RowProxy:
         kwargs = {
             'book_from': book_from,
             'book_to': book_to,
@@ -178,8 +208,8 @@ class OrderDAO(DAO):
             'user_id': user_id,
         }
         kwargs = {key: value for key, value in kwargs.items() if value}
-        if any(kwargs.values()):
-            await super().update(connection, _id, **kwargs)
+        if kwargs:
+            return await super().update(_id, **kwargs)
 
 
 class UserDAO(DAO):
@@ -187,14 +217,13 @@ class UserDAO(DAO):
 
     async def insert(
         self,
-        connection: SAConnection,
         first_name: str,
         last_name: str,
         email: str,
         password: bytes,
         birthdate: datetime.date,
         avatar: str = None,
-    ):
+    ) -> int:
         kwargs = {
             'first_name': first_name,
             'last_name': last_name,
@@ -203,11 +232,10 @@ class UserDAO(DAO):
             'avatar': avatar,
             'birthdate': birthdate,
         }
-        return await super().insert(connection, **kwargs)
+        return await super().insert(**kwargs)
 
     async def update(
         self,
-        connection: SAConnection,
         _id: int,
         first_name: str = None,
         last_name: str = None,
@@ -216,7 +244,7 @@ class UserDAO(DAO):
         avatar: str = None,
         birthday: datetime.date = None,
         role: str = None,
-    ):
+    ) -> RowProxy:
         kwargs = {
             'first_name': first_name,
             'last_name': last_name,
@@ -227,34 +255,5 @@ class UserDAO(DAO):
             'role': role,
         }
         kwargs = {key: value for key, value in kwargs.items() if value}
-        if any(kwargs.values()):
-            await super().update(connection, _id, **kwargs)
-
-
-if __name__ == '__main__':
-    class CreateEnumType(_CreateDropBase):
-        """
-        Helper class to create Enum type in database
-        aiopg doesn't create it on its own.
-        """
-        __visit_name__ = 'create_enum_type'
-
-    tasks = []
-
-    async def create_tables():
-        # CreateTable doesn't create type for Enum
-        # so it need to be created manually
-        try:
-            house = HouseDAO()
-            order = OrderDAO()
-            user = UserDAO()
-            engine = await user.get_engine()
-            async with engine.acquire() as connection:
-                await connection.execute(CreateEnumType(user_role))
-        except DuplicateObject:
-            print('>>> Duplicate enum type')  # TODO: change to logging
-        for dao in (house, order, user):
-            engine = await dao.get_engine()
-            async with engine.acquire() as connection:
-                await dao.create_table(connection)
-    asyncio.run(create_tables())
+        if kwargs:
+            return await super().update(_id, **kwargs)

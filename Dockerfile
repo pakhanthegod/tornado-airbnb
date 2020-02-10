@@ -5,7 +5,7 @@ RUN apt-get -y update
 RUN pip install pipenv
 COPY Pipfile Pipfile.lock /airbnb/
 WORKDIR /airbnb
-RUN pipenv install --system
+RUN pipenv install --system --dev
 
 COPY /airbnb /airbnb
 

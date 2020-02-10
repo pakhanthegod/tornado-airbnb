@@ -8,74 +8,119 @@ import tornado
 
 
 if TYPE_CHECKING:
-    from daos import HouseDAO, UserDAO
-
-
-class HouseListHandler(tornado.web.RequestHandler):
-    def initialize(self, DAO: HouseDAO) -> None:
-        self.houses = DAO()
-
-    async def get(self) -> None:
-        response = {}
-        engine = await self.houses.get_engine()
-        async with engine.acquire() as connection:
-            results = await self.houses.selectAll(connection)
-            response['results'] = [dict(row) for row in results]
-        self.write(response)
-        self.set_status(200)
-
-    async def post(self) -> None:
-        data = tornado.escape.json_decode(self.request.body)
-        engine = await self.houses.get_engine()
-        async with engine.acquire() as connection:
-            await self.houses.insert(connection, **data)
+    from daos import HouseDAO, UserDAO, DatabaseService
 
 
 class UserListHandler(tornado.web.RequestHandler):
-    def initialize(self, DAO: UserDAO) -> None:
-        self.user = DAO()
+    def initialize(self, DAO: UserDAO, database: DatabaseService) -> None:
+        self.user: UserDAO = DAO(database)
 
     async def get(self) -> None:
         response = {}
-        engine = await self.user.get_engine()
-        async with engine.acquire() as connection:
-            results = await self.user.selectAll(connection)
-            response['results'] = []
-            for row in results:
-                item = dict(row)
-                if item['password']:
-                    item['password'] = item['password'].decode('utf-8')
-                if item['birthdate']:
-                    item['birthdate'] = str(item['birthdate'])
-                response['results'].append(item)
+        response_results = []
+
+        results = await self.user.selectAll()
+        for row in results:
+            item = dict(row)
+            if item['password']:
+                item['password'] = item['password'].decode('utf-8')
+            if item['birthdate']:
+                item['birthdate'] = str(item['birthdate'])
+            response_results.append(item)
+
+        response['results'] = response_results
+
         self.write(response)
         self.set_status(200)
 
     async def post(self) -> None:
+        response = {}
         data = tornado.escape.json_decode(self.request.body)
-        engine = await self.user.get_engine()
-        async with engine.acquire() as connection:
-            password = data['password']
-            date = data['birthdate']
-            salt = bcrypt.gensalt()
-            hashed = bcrypt.hashpw(bytes(password, encoding='utf-8'), salt)
-            data['password'] = hashed
-            data['birthdate'] = datetime.datetime.strptime(date, '%d/%m/%Y')
-            await self.user.insert(connection, **data)
+
+        password = data['password']
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(bytes(password, encoding='utf-8'), salt)
+        data['password'] = hashed
+
+        date = data['birthdate']
+        data['birthdate'] = datetime.datetime.strptime(date, '%d/%m/%Y')
+
+        _id = await self.user.insert(**data)
+        response['results'] = {'id': _id}
+
+        self.write(response)
+        self.set_status(200)
+
+
+class UserDetailHandler(tornado.web.RequestHandler):
+    def initialize(self, DAO: UserDAO, database: DatabaseService) -> None:
+        self.user: UserDAO = DAO(database)
+
+    async def get(self, _id=None):
+        print(_id)
+        response = {}
+
+        if not _id:
+            response['errors'] = 'ID required'
+
+            self.set_status(400)
+        else:
+            row = await self.user.selectById(_id)
+
+            if row:
+                row = dict(row)
+                if row['password']:
+                    row['password'] = row['password'].decode('utf-8')
+                if row['birthdate']:
+                    row['birthdate'] = str(row['birthdate'])
+                response['results'] = row
+
+                self.set_status(200)
+            else:
+                response['errors'] = 'User with that ID does not exist'
+
+                self.set_status(400)
+
+        self.write(response)
+
+
+class HouseListHandler(tornado.web.RequestHandler):
+    def initialize(self, DAO: HouseDAO, database: DatabaseService) -> None:
+        self.houses: HouseDAO = DAO(database)
+
+    async def get(self) -> None:
+        response = {}
+
+        results = await self.houses.selectAll()
+        response['results'] = [dict(row) for row in results]
+
+        self.write(response)
+        self.set_status(200)
+
+    async def post(self) -> None:
+        response = {}
+        data = tornado.escape.json_decode(self.request.body)
+
+        _id = await self.houses.insert(**data)
+        response['results'] = {'id': _id}
+
+        self.write(response)
+        self.set_status(200)
 
 
 class HouseDetailHandler(tornado.web.RequestHandler):
-    def initialize(self, DAO: HouseDAO) -> None:
-        self.houses = DAO()
+    def initialize(self, DAO: HouseDAO, database: DatabaseService) -> None:
+        self.houses: HouseDAO = DAO(database)
 
-    async def get(self, id=None):
+    async def get(self, _id=None):
         response = {}
-        if not id:
+
+        if not _id:
             response['errors'] = 'ID required'
+            self.set_status(400)
         else:
-            engine = await self.houses.get_engine()
-            async with engine.acquire() as connection:
-                results = await self.houses.selectById(connection, id)
-                response['results'] = dict(results)
+            results = await self.houses.selectById(_id)
+            response['results'] = dict(results)
+            self.set_status(200)
+
         self.write(response)
-        self.set_status(200)

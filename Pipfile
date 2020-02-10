@@ -13,15 +13,19 @@ flake8-type-annotations = "*"
 flake8-broken-line = "*"
 flake8-print = "*"
 flake8-isort = "*"
+pytest-mock = "*"
+pytest-tornasync = "*"
+pytest = "*"
+pytest-asyncio = "*"
+flake8 = "*"
+asynctest = "*"
 
 [packages]
 tornado = "*"
 aiopg = "*"
 sqlalchemy = "*"
-pytest = "*"
-pytest-asyncio = "*"
-flake8 = "*"
 bcrypt = "*"
+asyncpgsa = "*"
 
 [requires]
 python_version = "3.8"
