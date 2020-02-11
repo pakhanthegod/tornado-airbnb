@@ -7,7 +7,14 @@ import pytest
 
 from app import make_app
 from daos import HouseDAO, UserDAO, OrderDAO, AiopgService
-from handlers import HouseDetailHandler, HouseListHandler, UserDetailHandler, UserListHandler
+from handlers import (
+    HouseDetailHandler,
+    HouseListHandler,
+    UserDetailHandler,
+    UserListHandler,
+    OrderListHandler,
+    OrderDetailHandler,
+)
 
 
 USER = os.environ.get('TEST_DB_USER')
@@ -38,6 +45,8 @@ urls = [
     (r'/houses/(?P<_id>\w+)', HouseDetailHandler, {'DAO': HouseDAO, 'database': AiopgTestService}),
     (r'/users', UserListHandler, {'DAO': UserDAO, 'database': AiopgTestService}),
     (r'/users/(?P<_id>\w+)', UserDetailHandler, {'DAO': UserDAO, 'database': AiopgTestService}),
+    (r'/orders', OrderListHandler, {'DAO': OrderDAO, 'database': AiopgTestService}),
+    (r'/orders/(?P<_id>\w+)', OrderDetailHandler, {'DAO': OrderDAO, 'database': AiopgTestService}),
 ]
 
 

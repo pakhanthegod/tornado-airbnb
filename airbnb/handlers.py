@@ -6,10 +6,11 @@ import decimal
 
 import bcrypt
 import tornado
+from dateutil import parser
 
 
 if TYPE_CHECKING:
-    from daos import HouseDAO, UserDAO, DatabaseService
+    from daos import HouseDAO, UserDAO, OrderDAO, DatabaseService
 
 
 class UserListHandler(tornado.web.RequestHandler):
@@ -69,9 +70,9 @@ class UserDetailHandler(tornado.web.RequestHandler):
 
             if row:
                 row = dict(row)
-                if row['password']:
+                if 'password' in row:
                     row['password'] = row['password'].decode('utf-8')
-                if row['birthdate']:
+                if 'birthdate' in row:
                     row['birthdate'] = str(row['birthdate'])
                 response['results'] = row
 
@@ -102,9 +103,9 @@ class UserDetailHandler(tornado.web.RequestHandler):
 
                 if row:
                     row = dict(row)
-                    if row['password']:
+                    if 'password' in row:
                         row['password'] = row['password'].decode('utf-8')
-                    if row['birthdate']:
+                    if 'birthdate' in row:
                         row['birthdate'] = str(row['birthdate'])
                     response['results'] = row
 
@@ -155,13 +156,13 @@ class HouseDetailHandler(tornado.web.RequestHandler):
             self.set_status(400)
         else:
             row = await self.house.selectById(_id)
-            
+
             if row:
                 row = dict(row)
-                if row['price']:
+                if 'price' in row:
                     row['price'] = str(row['price'])
                 response['results'] = row
-            
+
             self.set_status(200)
 
         self.write(response)
@@ -185,8 +186,102 @@ class HouseDetailHandler(tornado.web.RequestHandler):
 
                 if row:
                     row = dict(row)
-                    if row['price']:
+                    if 'price' in row:
                         row['price'] = str(row['price'])
+                    response['results'] = row
+
+                self.set_status(200)
+
+        self.write(response)
+
+
+class OrderListHandler(tornado.web.RequestHandler):
+    def initialize(self, DAO: OrderDAO, database: DatabaseService) -> None:
+        self.order: OrderDAO = DAO(database)
+
+    async def get(self) -> None:
+        response = {}
+        response_results = []
+
+        results = await self.order.selectAll()
+        for row in results:
+            item = dict(row)
+            if item['book_from']:
+                item['book_from'] = item['book_from'].isoformat()
+            if item['book_to']:
+                item['book_to'] = item['book_to'].isoformat()
+            response_results.append(item)
+
+        response['results'] = response_results
+        self.write(response)
+        self.set_status(200)
+
+    async def post(self) -> None:
+        response = {}
+        data = tornado.escape.json_decode(self.request.body)
+        data['book_from'] = parser.parse(data['book_from'])
+        data['book_to'] = parser.parse(data['book_to'])
+
+        _id = await self.order.insert(**data)
+        response['results'] = {'id': _id}
+
+        self.write(response)
+        self.set_status(200)
+
+
+class OrderDetailHandler(tornado.web.RequestHandler):
+    def initialize(self, DAO: OrderDAO, database: DatabaseService) -> None:
+        self.order: OrderDAO = DAO(database)
+
+    async def get(self, _id=None):
+        response = {}
+
+        if not _id:
+            response['errors'] = 'ID required'
+            self.set_status(400)
+        else:
+            row = await self.order.selectById(_id)
+
+            if row:
+                row = dict(row)
+                if 'book_from' in row:
+                    row['book_from'] = row['book_from'].isoformat()
+                if 'book_to' in row:
+                    row['book_to'] = row['book_to'].isoformat()
+                response['results'] = row
+
+            self.set_status(200)
+
+        self.write(response)
+
+    async def patch(self, _id=None) -> None:
+        response = {}
+
+        if not _id:
+            response['errors'] = 'ID required'
+
+            self.set_status(400)
+        else:
+            data = tornado.escape.json_decode(self.request.body)
+            if 'book_from' in data:
+                data['book_from'] = parser.parse(data['book_from'])
+            if 'book_to' in data:
+                data['book_to'] = parser.parse(data['book_to'])
+
+            results = await self.order.update(_id, **data)
+            if not results:
+                response['errors'] = 'Update error'
+
+                self.set_status(400)
+            else:
+                row = await self.order.selectById(_id)
+
+                if row:
+                    row = dict(row)
+                    if 'book_from' in row:
+                        row['book_from'] = row['book_from'].isoformat()
+                    if 'book_to' in row:
+                        row['book_to'] = row['book_to'].isoformat()
                     response['results'] = row
 
                 self.set_status(200)
