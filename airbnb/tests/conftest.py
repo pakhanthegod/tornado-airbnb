@@ -2,20 +2,19 @@ import os
 import datetime
 import decimal
 import asyncio
-import unittest
 
 import pytest
-from aiopg.sa import create_engine
 
 from app import make_app
-from daos import HouseDAO, UserDAO, OrderDAO, AiopgService, DatabaseService
+from daos import HouseDAO, UserDAO, OrderDAO, AiopgService
+from handlers import HouseDetailHandler, HouseListHandler, UserDetailHandler, UserListHandler
 
 
-USER = os.environ.get('DB_USER')
-PASSWORD = os.environ.get('DB_PASSWORD')
-DATABASE = os.environ.get('DB_NAME')
-HOST = os.environ.get('DB_HOST')
-PORT = os.environ.get('DB_PORT')
+USER = os.environ.get('TEST_DB_USER')
+PASSWORD = os.environ.get('TEST_DB_PASSWORD')
+DATABASE = os.environ.get('TEST_DB_NAME')
+HOST = os.environ.get('TEST_DB_HOST')
+PORT = os.environ.get('TEST_DB_PORT')
 
 
 @pytest.yield_fixture(scope='session')
@@ -26,27 +25,25 @@ def event_loop(request):
     loop.close()
 
 
-@pytest.fixture(autouse=True)
-async def connection():
-    async with create_engine(
-        user=USER, password=PASSWORD,
-        database=DATABASE, host=HOST,
-        port=PORT,
-    ) as engine:
-        async with engine.acquire() as connection:
-            transaction = await connection.begin()
-            yield connection
-            await transaction.rollback()
+class AiopgTestService(AiopgService):
+    user = USER
+    password = PASSWORD
+    database = DATABASE
+    host = HOST
+    port = PORT
 
 
-class AiopgTestService(DatabaseService):
-    async def get_connection(self):
-        return connection
+urls = [
+    (r'/houses', HouseListHandler, {'DAO': HouseDAO, 'database': AiopgTestService}),
+    (r'/houses/(?P<_id>\w+)', HouseDetailHandler, {'DAO': HouseDAO, 'database': AiopgTestService}),
+    (r'/users', UserListHandler, {'DAO': UserDAO, 'database': AiopgTestService}),
+    (r'/users/(?P<_id>\w+)', UserDetailHandler, {'DAO': UserDAO, 'database': AiopgTestService}),
+]
 
 
 @pytest.fixture
 def app():
-    return make_app()
+    return make_app(urls)
 
 
 @pytest.fixture()

@@ -1,34 +1,24 @@
 from __future__ import annotations
 
-import atexit
 import decimal
-import asyncio
 import os
 import datetime
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-import asyncpgsa
 from aiopg.sa import create_engine
 from sqlalchemy import Table
-from sqlalchemy.sql.ddl import CreateTable, _CreateDropBase
-from sqlalchemy.dialects.postgresql import dialect
-from psycopg2.errors import DuplicateTable, DuplicateObject
 
 from models.houses import house
 from models.orders import order
-from models.users import user, user_role
+from models.users import user
 
 
 if TYPE_CHECKING:
     from annotations import List
     from aiopg.sa.connection import SAConnection
-    from aiopg.sa.result import ResultProxy, RowProxy
+    from aiopg.sa.result import RowProxy
     from aiopg.sa.engine import Engine
-
-    from asyncpg.connection import Connection
-    from asyncpg.pool import Pool
-    create_pool()
 
 
 class DatabaseService(ABC):
@@ -86,11 +76,11 @@ class DAO(ABC):
             .delete()
             .where(self.table.c.id == _id)  # noqa
         )
-        row = await result.first()
+        row_count = result.rowcount
         await connection.close()
-        return row['id']
+        return row_count
 
-    async def update(self, _id: int, **kwargs) -> RowProxy:
+    async def update(self, _id: int, **kwargs) -> int:
         connection = await self.db.get_connection()
         result = await connection.execute(
             self.table
@@ -98,9 +88,9 @@ class DAO(ABC):
             .where(self.table.c.id == _id)
             .values(**kwargs)  # noqa
         )
-        row = await result.first()
+        row_count = result.rowcount
         await connection.close()
-        return row
+        return row_count
 
     async def selectById(self, _id: int) -> RowProxy:
         connection = await self.db.get_connection()
@@ -157,7 +147,7 @@ class HouseDAO(DAO):
         price: decimal.Decimal = None,
         latitude: float = None,
         longitude: float = None,
-    ) -> RowProxy:
+    ) -> int:
         kwargs = {
             'user_id': user_id,
             'description': description,
@@ -199,7 +189,7 @@ class OrderDAO(DAO):
         rating: int = None,
         house_id: int = None,
         user_id: int = None,
-    ) -> RowProxy:
+    ) -> int:
         kwargs = {
             'book_from': book_from,
             'book_to': book_to,
@@ -244,7 +234,7 @@ class UserDAO(DAO):
         avatar: str = None,
         birthday: datetime.date = None,
         role: str = None,
-    ) -> RowProxy:
+    ) -> int:
         kwargs = {
             'first_name': first_name,
             'last_name': last_name,

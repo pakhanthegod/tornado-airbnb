@@ -1,6 +1,7 @@
 .vscode
 .pytest_cache
 **/__pycache__
+**/.pytest_cache
 postgres-data
 **/*.tar.gz
 

@@ -1,10 +1,8 @@
 import pytest
 
-from daos import UserDAO
-
 
 @pytest.mark.asyncio
-async def test_insert(user):
+async def test_insert(user_dao):
     data = {
         'first_name': 'Foo',
         'last_name': 'Bar',

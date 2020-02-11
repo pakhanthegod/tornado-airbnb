@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 from typing import TYPE_CHECKING
+import decimal
 
 import bcrypt
 import tornado
@@ -57,7 +58,6 @@ class UserDetailHandler(tornado.web.RequestHandler):
         self.user: UserDAO = DAO(database)
 
     async def get(self, _id=None):
-        print(_id)
         response = {}
 
         if not _id:
@@ -83,25 +83,60 @@ class UserDetailHandler(tornado.web.RequestHandler):
 
         self.write(response)
 
+    async def patch(self, _id=None) -> None:
+        response = {}
+
+        if not _id:
+            response['errors'] = 'ID required'
+
+            self.set_status(400)
+        else:
+            data = tornado.escape.json_decode(self.request.body)
+            results = await self.user.update(_id, **data)
+            if not results:
+                response['errors'] = 'Update error'
+
+                self.set_status(400)
+            else:
+                row = await self.user.selectById(_id)
+
+                if row:
+                    row = dict(row)
+                    if row['password']:
+                        row['password'] = row['password'].decode('utf-8')
+                    if row['birthdate']:
+                        row['birthdate'] = str(row['birthdate'])
+                    response['results'] = row
+
+                self.set_status(200)
+        self.write(response)
+
 
 class HouseListHandler(tornado.web.RequestHandler):
     def initialize(self, DAO: HouseDAO, database: DatabaseService) -> None:
-        self.houses: HouseDAO = DAO(database)
+        self.house: HouseDAO = DAO(database)
 
     async def get(self) -> None:
         response = {}
+        response_results = []
 
-        results = await self.houses.selectAll()
-        response['results'] = [dict(row) for row in results]
+        results = await self.house.selectAll()
+        for row in results:
+            item = dict(row)
+            if item['price']:
+                item['price'] = str(item['price'])
+            response_results.append(item)
 
+        response['results'] = response_results
         self.write(response)
         self.set_status(200)
 
     async def post(self) -> None:
         response = {}
         data = tornado.escape.json_decode(self.request.body)
+        data['price'] = decimal.Decimal(data['price'])
 
-        _id = await self.houses.insert(**data)
+        _id = await self.house.insert(**data)
         response['results'] = {'id': _id}
 
         self.write(response)
@@ -110,7 +145,7 @@ class HouseListHandler(tornado.web.RequestHandler):
 
 class HouseDetailHandler(tornado.web.RequestHandler):
     def initialize(self, DAO: HouseDAO, database: DatabaseService) -> None:
-        self.houses: HouseDAO = DAO(database)
+        self.house: HouseDAO = DAO(database)
 
     async def get(self, _id=None):
         response = {}
@@ -119,8 +154,41 @@ class HouseDetailHandler(tornado.web.RequestHandler):
             response['errors'] = 'ID required'
             self.set_status(400)
         else:
-            results = await self.houses.selectById(_id)
-            response['results'] = dict(results)
+            row = await self.house.selectById(_id)
+            
+            if row:
+                row = dict(row)
+                if row['price']:
+                    row['price'] = str(row['price'])
+                response['results'] = row
+            
             self.set_status(200)
+
+        self.write(response)
+
+    async def patch(self, _id=None) -> None:
+        response = {}
+
+        if not _id:
+            response['errors'] = 'ID required'
+
+            self.set_status(400)
+        else:
+            data = tornado.escape.json_decode(self.request.body)
+            results = await self.house.update(_id, **data)
+            if not results:
+                response['errors'] = 'Update error'
+
+                self.set_status(400)
+            else:
+                row = await self.house.selectById(_id)
+
+                if row:
+                    row = dict(row)
+                    if row['price']:
+                        row['price'] = str(row['price'])
+                    response['results'] = row
+
+                self.set_status(200)
 
         self.write(response)

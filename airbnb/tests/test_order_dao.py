@@ -2,8 +2,6 @@ import datetime
 
 import pytest
 
-from daos import OrderDAO
-
 
 @pytest.mark.asyncio
 async def test_insert(order_dao, user_object, house_object):

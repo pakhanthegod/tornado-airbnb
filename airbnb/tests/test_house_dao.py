@@ -2,8 +2,6 @@ import decimal
 
 import pytest
 
-from daos import HouseDAO
-
 
 @pytest.mark.asyncio
 async def test_insert(house_dao, user_object):
@@ -25,9 +23,10 @@ async def test_insert(house_dao, user_object):
 
 @pytest.mark.asyncio
 async def test_delete(house_dao, house_object):
-    await house_dao.delete(house_object[house_dao.table.c.id])
+    row_count = await house_dao.delete(house_object[house_dao.table.c.id])
     select = await house_dao.selectById(house_object[house_dao.table.c.id])
 
+    assert row_count == 1
     assert select is None
 
 
@@ -45,9 +44,10 @@ async def test_update(house_dao, house_object):
         'description': 'new description for update',
     }
 
-    await house_dao.update(**new_data)
+    row_count = await house_dao.update(**new_data)
     select = await house_dao.selectById(house_object[house_dao.table.c.id])
 
+    assert row_count == 1
     assert house_object[house_dao.table.c.description] != select[house_dao.table.c.description]
 
 
